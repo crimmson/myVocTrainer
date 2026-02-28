@@ -6,11 +6,12 @@ from datetime import datetime
 FILE = "phrases.xlsx"
 
 df = pd.read_excel(FILE)
+df["last_review"] = pd.to_datetime(df["last_review"], errors="coerce")
 
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("Apprentissage FR ↔ DE")
+        self.root.title("MyVocTrainer")
 
         self.themes = sorted(df["themes"].unique())
         self.setup_menu()
@@ -39,12 +40,24 @@ class App:
 
         subset = df[df["themes"]==theme].copy()
 
+        subset["score"] = subset["score"].fillna(0)
+
+        print(subset[["fr","score","last_review"]])
+
+        subset["last_review"] = pd.to_datetime(
+            subset["last_review"],
+            errors="coerce"
+        ).fillna(pd.Timestamp("2000-01-01"))
+
         today = datetime.today()
         subset["weight"] = subset.apply(
             lambda r: (1/(r["score"]+1)) +
                       ((today - pd.to_datetime(r["last_review"])).days/30),
             axis=1
         )
+
+        if subset["weight"].sum() == 0:
+            subset["weight"] = 1
 
         self.session = subset.sample(min(n,len(subset)), weights=subset["weight"]).index.tolist()
         self.index = 0
@@ -106,7 +119,7 @@ class App:
         else:
             df.at[self.row_id,"score"] = max(0, df.at[self.row_id,"score"] - 1)
 
-        df.at[self.row_id,"last_review"] = datetime.today().strftime("%Y-%m-%d")
+        df.at[self.row_id,"last_reviewed"] = pd.Timestamp.today()
 
     def correct(self):
         self.update_stats(True)
