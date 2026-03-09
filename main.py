@@ -6,7 +6,24 @@ from datetime import datetime
 FILE = "phrases.xlsx"
 
 df = pd.read_excel(FILE)
+
 df["last_review"] = pd.to_datetime(df["last_review"], errors="coerce").astype("datetime64[ns]")
+
+# sécurité colonnes
+if "interval" not in df.columns:
+    df["interval"] = 1
+
+if "next_review" not in df.columns:
+    df["next_review"] = pd.Timestamp.today()
+
+if "status" not in df.columns:
+    df["status"] = "new"
+
+# nettoyage des données
+df["interval"] = pd.to_numeric(df["interval"], errors="coerce").fillna(1).astype(int)
+df["interval"] = df["interval"].clip(upper=10)
+
+df["next_review"] = pd.to_datetime(df["next_review"], errors="coerce")
 
 class App:
     def __init__(self, root):
@@ -61,7 +78,19 @@ class App:
         self.delay_repeat = 3
         self.repeat_queue = []
 
-        subset = df[df["themes"]==theme].copy()
+        # subset = df[df["themes"]==theme].copy()
+
+        today = pd.Timestamp.today()
+        self.today = today
+
+        subset = df[
+            (df["themes"] == theme) &
+            (df["next_review"] <= today)
+        ].copy()
+
+        # si aucune carte n'est due aujourd'hui
+        if len(subset) == 0:
+            subset = df[df["themes"] == theme].copy()
 
         subset["status"] = subset["status"].fillna("new")
 
@@ -70,14 +99,24 @@ class App:
             errors="coerce"
         )
 
-        self.today = pd.Timestamp.today()
-
         subset["weight"] = subset.apply(self.compute_weight, axis=1)
+
+        subset["weight"] = subset["weight"].fillna(1)
 
         if subset["weight"].sum() == 0:
             subset["weight"] = 1
 
-        self.session = subset.sample(min(n,len(subset)), weights=subset["weight"]).index.tolist()
+        draw_size = min(len(subset), n * 3)
+
+        # selectionner un échantillon pondéré sans doublons
+        draw = subset.sample(
+            draw_size,
+            weights=subset["weight"],
+            replace=True
+        ).index.tolist()
+
+        # supprimer doublons en gardant l'ordre
+        self.session = list(dict.fromkeys(draw))[:n]
 
         self.index = 0
 
@@ -91,7 +130,10 @@ class App:
         self.frame.pack()
 
         self.counter_label = ttk.Label(self.frame, text="", font=("Arial",10))
-        self.counter_label.pack()
+        self.counter_label.pack(pady=5)
+
+        self.progress = ttk.Progressbar(self.frame, length=400, mode="determinate")
+        self.progress.pack(pady=5)
 
         self.question = ttk.Label(self.frame, text="", font=("Arial",16), wraplength=450, justify="center")
         self.question.pack(pady=20)
@@ -150,8 +192,11 @@ class App:
         pending_repeats = len(self.repeat_queue)
 
         self.counter_label.config(
-            text=f"{self.index+1}/{len(self.session)} | répétitions prévues: {pending_repeats}"
+            text=f"Question {self.index+1} / {len(self.session)}   |   Répétitions prévues : {pending_repeats}"
         )
+
+        self.progress["maximum"] = len(self.session)
+        self.progress["value"] = self.index
 
         self.current = row
         direction = self.dir_var.get()
@@ -176,10 +221,29 @@ class App:
 
             if success:
                 df.at[self.row_id,"status"] = "correct"
+
+                interval = df.at[self.row_id, "interval"]
+
+                if pd.isna(interval):
+                    interval = 1
+
+                interval = min(10, max(1, int(interval) * 2))
+
+                df.at[self.row_id, "interval"] = interval
+
+                df.at[self.row_id, "next_review"] = (
+                    pd.Timestamp.now() + pd.Timedelta(days=interval)
+                    ).floor("s")
+
+                df.at[self.row_id, "last_review"] = pd.Timestamp.now().floor("s")
+
             else:
                 df.at[self.row_id,"status"] = "wrong"
-
-            df.at[self.row_id,"last_review"] = pd.Timestamp.now().floor("s")
+                df.at[self.row_id, "interval"] = 1
+                df.at[self.row_id, "next_review"] = (
+                    pd.Timestamp.now() + pd.Timedelta(days=1)
+                    ).floor("s")
+                df.at[self.row_id, "last_review"] = pd.Timestamp.now().floor("s")
 
             self.first_attempt.add(self.row_id)
 
