@@ -135,10 +135,40 @@ class App:
         self.progress = ttk.Progressbar(self.frame, length=400, mode="determinate")
         self.progress.pack(pady=5)
 
-        self.question = ttk.Label(self.frame, text="", font=("Arial",16), wraplength=450, justify="center")
-        self.question.pack(pady=20)
+        # carte
+        self.card = tk.Frame(
+            self.frame,
+            bg="white",
+            bd=2,
+            relief="solid",
+            width=500,
+            height=220
+        )
 
-        self.answer = ttk.Label(self.frame, text="", font=("Arial",14), foreground="gray", wraplength=450, justify="center")
+        self.card.pack(pady=25)
+        self.card.pack_propagate(False)
+
+        self.question = tk.Label(
+            self.card,
+            text="",
+            font=("Arial",18,"bold"),
+            wraplength=460,
+            justify="center",
+            bg="white"
+        )
+
+        self.question.pack(expand=True)
+
+        self.answer = tk.Label(
+            self.card,
+            text="",
+            font=("Arial",15),
+            wraplength=460,
+            justify="center",
+            fg="gray40",
+            bg="white"
+        )
+
         self.answer.pack(pady=10)
 
         btn_frame = ttk.Frame(self.frame)
