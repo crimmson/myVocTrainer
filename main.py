@@ -27,6 +27,9 @@ df["next_review"] = pd.to_datetime(df["next_review"], errors="coerce")
 
 class App:
     def __init__(self, root):
+        
+        
+
         self.root = root
         self.root.title("MyVocTrainer")
         self.root.geometry("700x500")
@@ -36,22 +39,150 @@ class App:
         self.setup_menu()
 
     def setup_menu(self):
-        frame = ttk.Frame(self.root, padding=20)
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill="both", expand=True)
+
+        self.menu_tab = ttk.Frame(self.notebook)
+        self.stats_tab = ttk.Frame(self.notebook)
+
+        self.notebook.add(self.menu_tab, text="Entrainement")
+        self.notebook.add(self.stats_tab, text="Stats")
+
+        frame = ttk.Frame(self.menu_tab, padding=20)
         frame.pack(expand=True)
 
         ttk.Label(frame, text="themes").pack()
+
         self.theme_var = tk.StringVar(value=self.themes[0])
         ttk.Combobox(frame, textvariable=self.theme_var, values=self.themes).pack()
 
         ttk.Label(frame, text="Nombre de phrases").pack()
+
         self.nb_var = tk.IntVar(value=10)
         ttk.Combobox(frame, textvariable=self.nb_var, values=[10,20,50]).pack()
 
         ttk.Label(frame, text="Sens").pack()
+
         self.dir_var = tk.StringVar(value="FR → DE")
         ttk.Combobox(frame, textvariable=self.dir_var, values=["FR → DE","DE → FR"]).pack()
 
         ttk.Button(frame, text="Démarrer", command=self.start).pack(pady=10)
+
+        self.build_global_progress()
+        
+        self.build_stats()
+
+    def build_stats(self):
+
+        theme_width = 150
+        bar_width = 450
+
+        legend_row = ttk.Frame(self.stats_tab)
+        legend_row.pack(fill="x", pady=10, padx=10)
+
+        ttk.Label(legend_row, text="", width=20).pack(side="left")
+
+        legend_bar = tk.Canvas(legend_row, height=22, width=bar_width)
+        legend_bar.pack(side="left")
+
+        legend_bar.create_rectangle(0,0,bar_width/3,22,fill="white",outline="black")
+        legend_bar.create_text(bar_width/6,11,text="new")
+
+        legend_bar.create_rectangle(bar_width/3,0,2*bar_width/3,22,fill="orange",outline="")
+        legend_bar.create_text(bar_width/2,11,text="wrong")
+
+        legend_bar.create_rectangle(2*bar_width/3,0,bar_width,22,fill="green",outline="")
+        legend_bar.create_text(5*bar_width/6,11,text="correct")
+
+        stats = df.groupby(["themes","status"]).size().unstack(fill_value=0)
+
+        for col in ["new","wrong","correct"]:
+            if col not in stats.columns:
+                stats[col] = 0
+
+        stats["total"] = stats["new"] + stats["wrong"] + stats["correct"]
+        stats["wrong_pct"] = stats["wrong"] / stats["total"]
+
+        for theme in stats.sort_values("wrong_pct", ascending=False).index:
+
+            row = ttk.Frame(self.stats_tab)
+            row.pack(fill="x", pady=6, padx=10)
+
+            #wrong_pct = stats.loc[theme,"wrong_pct"]
+
+            #if wrong_pct > 0.3:
+            #    label = f"⚠ {theme}"
+            #elif wrong_pct > 0.1:
+            #    label = f"• {theme}"
+            #else:
+            #    label = f"✓ {theme}"
+
+            #ttk.Label(row, text=label, width=20).pack(side="left")
+            ttk.Label(row, text=theme, width=20).pack(side="left")
+            bar = tk.Canvas(row, height=22)
+            bar.pack(side="left", fill="x", expand=True, padx=10)
+
+            total = stats.loc[theme, "total"]
+
+            if total == 0:
+                continue
+
+            new = stats.loc[theme,"new"] / total
+            wrong = stats.loc[theme,"wrong"] / total
+            correct = stats.loc[theme,"correct"] / total
+
+            width = bar_width
+
+            x0 = 0
+
+            w_new = width * new
+            w_wrong = width * wrong
+            w_correct = width * correct
+
+            bar.create_rectangle(x0,0,x0+w_new,22,fill="white",outline="black")
+            bar.create_text(x0+w_new/2,11,text=f"{int(new*100)}%")
+
+            x0 += w_new
+
+            bar.create_rectangle(x0,0,x0+w_wrong,22,fill="orange",outline="")
+            bar.create_text(x0+w_wrong/2,11,text=f"{round(wrong*100)}%")
+
+            x0 += w_wrong
+
+            bar.create_rectangle(x0,0,x0+w_correct,22,fill="green",outline="")
+            bar.create_text(x0+w_correct/2,11,text=f"{int(correct*100)}%")
+
+    def build_global_progress(self):
+
+        frame = ttk.Frame(self.menu_tab)
+        frame.pack(pady=10)
+
+        ttk.Label(frame, text="Progression globale du vocabulaire",
+                font=("Arial", 12, "bold")).pack()
+
+        total = len(df)
+        correct = (df["status"] == "correct").sum()
+
+        if total == 0:
+            percent = 0
+        else:
+            percent = correct / total
+
+        bar_width = 400
+
+        canvas = tk.Canvas(frame, width=bar_width, height=25)
+        canvas.pack(pady=5)
+
+        filled = bar_width * percent
+
+        canvas.create_rectangle(0,0,filled,25, fill="green")
+        canvas.create_rectangle(filled,0,bar_width,25, outline="black")
+
+        canvas.create_text(bar_width/2,12,
+                        text=f"{int(percent*100)}%")
+
+        ttk.Label(frame,
+                text=f"{correct} / {total} phrases maîtrisées").pack()
 
     def compute_weight(self, row):
 
