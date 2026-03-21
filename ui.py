@@ -14,7 +14,7 @@ class App:
         self.root.geometry("700x500")
         self.root.resizable(False, False)
 
-        self.themes = sorted(self.df["themes"].unique())
+        self.themes = sorted(self.df["themes"].dropna().astype(str).unique())
         self.setup_menu()
 
     def setup_menu(self):
@@ -249,8 +249,15 @@ class App:
         draw_size = min(len(subset), n * 3)
 
         # selectionner un échantillon pondéré sans doublons
-        subset = subset.sample(frac=1, weights=subset["weight"])
-        self.session = subset.index.tolist()[:n]
+        draw_size = min(len(subset), n * 3)
+
+        draw = subset.sample(
+            n=draw_size,
+            weights=subset["weight"],
+            replace=True
+        ).index.tolist()
+
+        self.session = list(dict.fromkeys(draw))[:n]
 
         self.index = 0
 
@@ -427,7 +434,7 @@ class App:
 
     def correct(self):
         self.update_stats(True)
-        self.save()
+        save_data(self.df)
         self.index += 1
         self.load_question()
         
@@ -440,10 +447,7 @@ class App:
                 "row": self.row_id,
                 "due": self.index + self.delay_repeat
             })
-        self.save()
+        save_data(self.df)
         self.index += 1
         self.errors_total += 1
         self.load_question()
-
-    def save(self):
-        self.df.to_excel(FILE, index=False)
